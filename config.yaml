@@ -1,0 +1,25 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+auth:
+  token_file: "/var/run/agent/.api_token"
+  rotation_hour: 0
+  token_length: 32
+executor:
+  default_timeout: 30
+  max_timeout: 300
+  max_output_size_mb: 10
+  allowed_commands: []
+  blocked_keywords:
+    - "rm -rf /"
+    - "mkfs"
+    - "dd if=/dev/zero"
+    - "shutdown"
+    - ":\\(\\)\\{"
+  work_dir: "/tmp/agent_workspace"
+  upload_dir: ""
+  max_upload_size_mb: 64
+  allowed_extensions: []
+task_manager:
+  max_running_tasks: 50
+  retention_minutes: 60
