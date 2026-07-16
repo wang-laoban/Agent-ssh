@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"test-agent/internal/config"
@@ -118,8 +117,8 @@ func (e *Executor) Execute(ctx context.Context, command string, timeout time.Dur
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(execCtx, "/bin/sh", "-c", command)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd := newShellCommand(execCtx, command)
+	setProcessGroup(cmd)
 	cmd.Dir = e.cfg.WorkDir
 
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -135,15 +134,11 @@ func (e *Executor) Execute(ctx context.Context, command string, timeout time.Dur
 		return &ExecResult{ExitCode: -1, Stderr: fmt.Sprintf("start command error: %v", err), Duration: time.Since(start).Milliseconds()}
 	}
 
-	// Ensure the whole process tree is killed if the context is cancelled.
+	// Ensure the process is killed if the context is cancelled.
 	go func() {
 		<-execCtx.Done()
 		if cmd.Process != nil {
-			if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
-				_ = syscall.Kill(-pgid, syscall.SIGKILL)
-			} else {
-				_ = cmd.Process.Kill()
-			}
+			_ = killProcessTree(cmd)
 		}
 	}()
 

@@ -1,6 +1,6 @@
 # test-agent
 
-一个运行于 Linux 测试机上的轻量级远程命令执行 Agent，提供 HTTP RESTful API，用于替代 SSH 交互，让主控端可以远程下发命令、运行脚本、上传文件并收集执行结果。
+一个运行于测试机上的轻量级远程命令执行 Agent，提供 HTTP RESTful API，用于替代 SSH 交互，让主控端可以远程下发命令、运行脚本、上传文件并收集执行结果。
 
 ## 功能特性
 
@@ -9,8 +9,25 @@
 - **动态 Token 鉴权**：Token 每日自动轮换，写入受权限保护的文件，避免硬编码
 - **安全过滤**：命令黑名单/白名单、路径穿越防护、文件大小限制、扩展名白名单
 - **资源限制**：命令超时控制、输出截断（默认 10MB）、最大上传限制（默认 64MB）
-- **进程管理**：使用进程组（PGID）清理，超时或取消时 kill 整个进程树
+- **进程管理**：Unix 下使用进程组（PGID）清理，超时或取消时 kill 整个进程树；Windows 下直接结束主进程
 - **优雅退出**：监听 SIGTERM/SIGINT，等待正在运行的任务结束后再关闭 HTTP 服务
+
+## 使用场景
+
+### 作为 AI 编程助手的远程测试机
+
+将 `test-agent` 部署到一台测试机后，它可以作为 **Claude Code 等 AI 编程工具的远程执行环境**，完全替代手动登录服务器操作：
+
+- **无需暴露 SSH**：主控端通过 HTTP API + 动态 Token 下发命令，不需要把 SSH 私钥或账户密码交给任何工具。
+- **即装即用**：只需在目标机器上启动 Agent，即可从主控端远程执行命令、上传脚本、收集输出。
+- **完整执行记录**：所有命令执行结果、耗时、输出内容均通过 `log/slog` 以 JSON 形式落盘，方便审计、回溯和排障。
+- **安全可控**：命令黑白名单、超时控制、输出限制、路径穿越防护等多重机制，避免误操作或恶意指令影响生产环境。
+
+### 持续集成与回归测试
+
+- 在 CI/CD 流水线中调用 `/api/v1/exec` 或 `/api/v1/tasks` 远程运行测试脚本。
+- 通过 `/api/v1/upload` 下发待测二进制或测试包，执行完成后收集结果。
+- 异步任务模式适合长时间运行的回归测试，主控端可轮询或回调获取结果。
 
 ## 技术栈
 
@@ -28,7 +45,10 @@
 │   ├── config/config.go            # 配置加载与默认值
 │   ├── auth/auth.go                # Token 生成、缓存、轮换
 │   ├── gateway/gateway.go          # HTTP 路由与 API 处理
-│   ├── executor/executor.go        # 命令执行与安全过滤
+│   ├── executor/
+│   │   ├── executor.go             # 命令执行与安全过滤（通用逻辑）
+│   │   ├── executor_sys_unix.go    # Unix 平台相关实现
+│   │   └── executor_sys_windows.go # Windows 平台相关实现
 │   └── taskmanager/taskmanager.go  # 异步任务生命周期
 ```
 
@@ -37,10 +57,17 @@
 ### 1. 编译
 
 ```bash
+# Linux（默认目标平台）
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o test-agent .
+
+# Windows
+GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o test-agent.exe .
+
+# macOS
+GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o test-agent .
 ```
 
-> 注意：项目使用 Linux 特有的 `syscall.Setpgid/Getpgid/Kill`，Windows 本地 `go build` 会失败，请使用 `GOOS=linux` 交叉编译。
+项目使用 Go build tag 区分 Unix/Windows 平台实现，可直接在 Windows 上 `go build ./...` 编译。
 
 ### 2. 运行
 
@@ -48,7 +75,17 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o test-agent .
 ./test-agent --config config.yaml
 ```
 
-首次启动时会自动创建 Token 文件（默认 `/var/run/agent/.api_token`），权限强制为 `0600`。
+### 3.把信息提供给claude code
+
+先把当前readme.md给claude code 读取。
+然后在运行的终端执行
+
+```bash
+sudo cat /var/run/agent/.api_token
+```
+拿到今日token，然后把ip地址、端口（默认8080）给到calude code，这样你就有了一台测试机了。
+
+每天开始任务的时候把最新的token给到claude code，安全没烦恼。
 
 ## API 接口
 
