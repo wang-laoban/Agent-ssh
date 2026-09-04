@@ -149,6 +149,12 @@ func (tm *TokenManager) getToken() string {
 	return tm.token
 }
 
+// CurrentToken returns the current in-memory token. It is intended for
+// startup banners and operational tooling, not for request handling.
+func (tm *TokenManager) CurrentToken() string {
+	return tm.getToken()
+}
+
 // VerifyToken checks the provided token first against the in-memory cache, then
 // falls back to reading the token file once. If the disk token matches, the
 // in-memory cache is refreshed.

@@ -16,6 +16,7 @@ type Config struct {
 	Auth        AuthConfig        `yaml:"auth"`
 	Executor    ExecutorConfig    `yaml:"executor"`
 	TaskManager TaskManagerConfig `yaml:"task_manager"`
+	Log         LogConfig         `yaml:"log"`
 }
 
 // ServerConfig describes the HTTP server binding.
@@ -50,6 +51,46 @@ type TaskManagerConfig struct {
 	RetentionMinutes int `yaml:"retention_minutes"`
 }
 
+// LogConfig describes tamper-proof structured logging and MQ dispatch.
+type LogConfig struct {
+	Enabled          bool     `yaml:"enabled"`
+	File             string   `yaml:"file"`
+	SignKeyFile      string   `yaml:"sign_key_file"`
+	VerifyPubFile    string   `yaml:"verify_pub_file"`
+	SignatureAlgo    string   `yaml:"signature_algo"`
+	ConsoleOutput    bool     `yaml:"console_output"`
+	AutoGenerateKeys bool     `yaml:"auto_generate_keys"`
+	MQ               MQConfig `yaml:"mq"`
+}
+
+// MQConfig describes the message queue used for off-site log replication.
+type MQConfig struct {
+	Type  string        `yaml:"type"`
+	Topic string        `yaml:"topic"`
+	File  FileMQConfig  `yaml:"file"`
+	Redis RedisMQConfig `yaml:"redis"`
+	Kafka KafkaMQConfig `yaml:"kafka"`
+}
+
+// FileMQConfig is a disk-based queue for testing or local spooling.
+type FileMQConfig struct {
+	Dir string `yaml:"dir"`
+}
+
+// RedisMQConfig targets a Redis stream.
+type RedisMQConfig struct {
+	Addr     string `yaml:"addr"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+	Stream   string `yaml:"stream"`
+}
+
+// KafkaMQConfig targets an Apache Kafka topic.
+type KafkaMQConfig struct {
+	Brokers []string `yaml:"brokers"`
+	Topic   string   `yaml:"topic"`
+}
+
 // DefaultConfig returns a Config pre-filled with design-document defaults.
 func DefaultConfig() *Config {
 	return &Config{
@@ -63,10 +104,10 @@ func DefaultConfig() *Config {
 			TokenLength:  32,
 		},
 		Executor: ExecutorConfig{
-			DefaultTimeout:    30,
-			MaxTimeout:        300,
-			MaxOutputSizeMB:   10,
-			AllowedCommands:   []string{},
+			DefaultTimeout:  30,
+			MaxTimeout:      300,
+			MaxOutputSizeMB: 10,
+			AllowedCommands: []string{},
 			BlockedKeywords: []string{
 				`rm -rf /`,
 				`mkfs`,
@@ -82,6 +123,22 @@ func DefaultConfig() *Config {
 		TaskManager: TaskManagerConfig{
 			MaxRunningTasks:  50,
 			RetentionMinutes: 60,
+		},
+		Log: LogConfig{
+			Enabled:          true,
+			File:             "/var/log/agent/agent.log",
+			SignKeyFile:      "/etc/agent/agent-sign.key",
+			VerifyPubFile:    "/etc/agent/agent-sign.pub",
+			SignatureAlgo:    "ed25519",
+			ConsoleOutput:    false,
+			AutoGenerateKeys: true,
+			MQ: MQConfig{
+				Type:  "file",
+				Topic: "agent-logs",
+				File: FileMQConfig{
+					Dir: "/var/spool/agent/mq",
+				},
+			},
 		},
 	}
 }
@@ -127,6 +184,15 @@ func Load(path string) (*Config, error) {
 	if cfg.TaskManager.RetentionMinutes <= 0 {
 		cfg.TaskManager.RetentionMinutes = 60
 	}
+	if cfg.Log.File == "" {
+		cfg.Log.File = "/var/log/agent/agent.log"
+	}
+	if cfg.Log.SignatureAlgo == "" {
+		cfg.Log.SignatureAlgo = "ed25519"
+	}
+	if cfg.Log.MQ.Topic == "" {
+		cfg.Log.MQ.Topic = "agent-logs"
+	}
 
 	return cfg, nil
 }
@@ -163,6 +229,46 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("EXECUTOR_ALLOWED_EXTENSIONS"); v != "" {
 		cfg.Executor.AllowedExtensions = strings.Split(v, ",")
 	}
+	if v := os.Getenv("LOG_ENABLED"); v != "" {
+		cfg.Log.Enabled = parseBool(v, cfg.Log.Enabled)
+	}
+	if v := os.Getenv("LOG_FILE"); v != "" {
+		cfg.Log.File = v
+	}
+	if v := os.Getenv("LOG_SIGN_KEY_FILE"); v != "" {
+		cfg.Log.SignKeyFile = v
+	}
+	if v := os.Getenv("LOG_CONSOLE_OUTPUT"); v != "" {
+		cfg.Log.ConsoleOutput = parseBool(v, cfg.Log.ConsoleOutput)
+	}
+	if v := os.Getenv("LOG_AUTO_GENERATE_KEYS"); v != "" {
+		cfg.Log.AutoGenerateKeys = parseBool(v, cfg.Log.AutoGenerateKeys)
+	}
+	if v := os.Getenv("LOG_MQ_TYPE"); v != "" {
+		cfg.Log.MQ.Type = v
+	}
+	if v := os.Getenv("LOG_MQ_TOPIC"); v != "" {
+		cfg.Log.MQ.Topic = v
+	}
+	if v := os.Getenv("LOG_MQ_FILE_DIR"); v != "" {
+		cfg.Log.MQ.File.Dir = v
+	}
+	if v := os.Getenv("LOG_MQ_REDIS_ADDR"); v != "" {
+		cfg.Log.MQ.Redis.Addr = v
+	}
+	if v := os.Getenv("LOG_MQ_KAFKA_BROKERS"); v != "" {
+		cfg.Log.MQ.Kafka.Brokers = strings.Split(v, ",")
+	}
+}
+
+func parseBool(v string, def bool) bool {
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+	return def
 }
 
 // MaxOutputSize returns the configured maximum output size in bytes.

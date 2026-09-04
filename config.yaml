@@ -1,8 +1,8 @@
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 28080
 auth:
-  token_file: "/var/run/agent/.api_token"
+  token_file: ".api_token"
   rotation_hour: 0
   token_length: 32
 executor:
@@ -23,3 +23,25 @@ executor:
 task_manager:
   max_running_tasks: 50
   retention_minutes: 60
+log:
+  enabled: true
+  file: "/var/log/agent/agent.log"
+  sign_key_file: "agent-sign.key"
+  verify_pub_file: "agent-sign.pub"
+  signature_algo: "ed25519"
+  console_output: true
+  auto_generate_keys: true  # 启动时若缺少签名密钥对则自动生成；设为 false 可强制要求手动 --generate-keys
+  mq:
+    type: "file"
+    topic: "agent-logs"
+    file:
+      dir: "./mq-spool"
+    redis:
+      addr: "localhost:6379"
+      password: ""
+      db: 0
+      stream: "agent-logs"
+    kafka:
+      brokers:
+        - "localhost:9092"
+      topic: "agent-logs"
