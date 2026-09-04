@@ -6,13 +6,13 @@ A lightweight remote command execution agent that runs on test machines. It prov
 
 - **Remote Command Execution**: synchronous (`POST /exec`) and asynchronous (`POST /tasks`) execution modes.
 - **File Upload**: distribute test programs or scripts via `POST /api/v1/upload`.
-- **Dynamic Token Authentication**: tokens are automatically rotated daily and written to a permission-protected file, avoiding hard-coded secrets.
+- **Dynamic Token Authentication**: tokens are automatically rotated daily and written to a permission-protected file, avoiding hard-coded secrets. The current token is printed to the terminal on startup — no need to open the token file.
 - **Security Filtering**: command blacklist/whitelist, path traversal protection, file size limits, and extension whitelist.
 - **Resource Limits**: command timeout, output truncation (default 10MB), and maximum upload size (default 64MB).
 - **Process Management**: on Unix, process groups (PGID) are used so the entire process tree is killed on timeout/cancellation; on Windows the main process is terminated directly.
 - **Graceful Shutdown**: listens for SIGTERM/SIGINT, waits for running tasks, then shuts down the HTTP server.
 - **Tamper-Proof Logging**: structured logs are persisted locally with Ed25519 signatures, SHA256 hash chains, and global sequence numbers. Logs are replicated asynchronously to MQ and can be verified offline.
-- **Key Pair Management**: built-in command to generate signing key pairs and verify persisted logs.
+- **Key Pair Management**: signing key pairs are generated automatically on startup when missing (optional, existing keys are never overwritten), with a manual `--generate-keys` command also available; persisted logs can be verified for integrity.
 
 ## Use Cases
 
