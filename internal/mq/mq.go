@@ -37,7 +37,7 @@ func New(cfg config.MQConfig) (Sender, error) {
 type noopSender struct{}
 
 func (n *noopSender) Send(ctx context.Context, entry logentry.Entry) error { return nil }
-func (n *noopSender) Close() error                                       { return nil }
+func (n *noopSender) Close() error                                         { return nil }
 
 // marshalEntry returns the JSON encoding of an entry.
 func marshalEntry(entry logentry.Entry) ([]byte, error) {
