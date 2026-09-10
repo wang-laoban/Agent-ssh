@@ -147,9 +147,13 @@ Request body:
 ```json
 {
   "command": "uname -a",
-  "timeout": 30
+  "timeout": 30,
+  "work_dir": "proj-a"
 }
 ```
+
+- `work_dir` (optional): working directory for this command. Relative paths are joined under the configured `executor.work_dir` (e.g. `/tmp/agent_workspace/proj-a`) and created if missing; any path escaping `work_dir` (e.g. `../../etc`) is rejected with code 1001. When omitted, the default `work_dir` is used. **When multiple clients/sessions use the agent concurrently, each should use its own subdirectory to avoid file collisions.**
+- The `env_vars` field is reserved and currently ignored.
 
 Response:
 ```json
@@ -170,6 +174,8 @@ Response:
 ```bash
 POST /api/v1/tasks
 ```
+
+The request body is the same as `/api/v1/exec` (`command` / `timeout` / `work_dir`).
 
 Response:
 ```json

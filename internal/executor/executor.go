@@ -104,7 +104,9 @@ func (e *Executor) Validate(command string) error {
 }
 
 // Execute runs the command under /bin/sh -c with timeout and output limits.
-func (e *Executor) Execute(ctx context.Context, command string, timeout time.Duration) *ExecResult {
+// workDir must have been validated by ResolveWorkDir; an empty workDir falls
+// back to the configured default.
+func (e *Executor) Execute(ctx context.Context, workDir, command string, timeout time.Duration) *ExecResult {
 	start := time.Now()
 
 	if timeout <= 0 {
@@ -114,12 +116,16 @@ func (e *Executor) Execute(ctx context.Context, command string, timeout time.Dur
 		timeout = max
 	}
 
+	if workDir == "" {
+		workDir = e.cfg.WorkDir
+	}
+
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd := newShellCommand(execCtx, command)
 	setProcessGroup(cmd)
-	cmd.Dir = e.cfg.WorkDir
+	cmd.Dir = workDir
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -203,13 +209,41 @@ func (e *Executor) readLimited(r io.Reader, limit int64) limitedRead {
 }
 
 // ExecuteWithID is a convenience wrapper that tags logs with a request/task ID.
-func (e *Executor) ExecuteWithID(ctx context.Context, id string, command string, timeout time.Duration) *ExecResult {
+func (e *Executor) ExecuteWithID(ctx context.Context, id, workDir, command string, timeout time.Duration) *ExecResult {
 	e.logger.Info("executing_command",
 		slog.String("request_id", id),
+		slog.String("work_dir", workDir),
 		slog.String("command_preview", previewCommand(command)),
 		slog.Duration("timeout", timeout),
 	)
-	return e.Execute(ctx, command, timeout)
+	return e.Execute(ctx, workDir, command, timeout)
+}
+
+// ResolveWorkDir validates a client-requested working directory and returns
+// the absolute path to execute in. An empty requested path resolves to the
+// configured work_dir. Relative paths are joined under the configured
+// work_dir; absolute paths must stay inside it. The directory is created if
+// missing. Any path escaping the configured work_dir is rejected.
+func (e *Executor) ResolveWorkDir(requested string) (string, error) {
+	base := filepath.Clean(e.cfg.WorkDir)
+	if strings.TrimSpace(requested) == "" {
+		return base, nil
+	}
+
+	target := filepath.Clean(requested)
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(base, target)
+	}
+
+	rel, err := filepath.Rel(base, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("work_dir %q escapes configured work_dir %q", requested, base)
+	}
+
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return "", fmt.Errorf("create work dir %q: %w", target, err)
+	}
+	return target, nil
 }
 
 // previewCommand returns a short, safe preview of the command for logging.

@@ -31,17 +31,17 @@ type APIResponse struct {
 
 // Error codes.
 const (
-	CodeOK              = 0
-	CodeBadRequest      = 1001
-	CodeUnauthorized    = 1002
-	CodeForbidden       = 1003
-	CodeNotFound        = 1004
-	CodeRequestTimeout  = 1005
-	CodeTooManyRequests = 1006
-	CodeFileTooLarge    = 1011
-	CodeInvalidFileName = 1012
-	CodeInternalError   = 2001
-	CodeUploadFailed    = 2002
+	CodeOK                = 0
+	CodeBadRequest        = 1001
+	CodeUnauthorized      = 1002
+	CodeForbidden         = 1003
+	CodeNotFound          = 1004
+	CodeRequestTimeout    = 1005
+	CodeTooManyRequests   = 1006
+	CodeFileTooLarge      = 1011
+	CodeInvalidFileName   = 1012
+	CodeInternalError     = 2001
+	CodeUploadFailed      = 2002
 	CodeFileAlreadyExists = 2003
 )
 
@@ -204,10 +204,20 @@ func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 		timeout = 0 // let executor apply default
 	}
 
-	result := s.exec.ExecuteWithID(ctx, reqID, req.Command, timeout)
+	workDir, err := s.exec.ResolveWorkDir(req.WorkDir)
+	if err != nil {
+		s.logger.Warn("invalid_work_dir",
+			slog.String("request_id", reqID),
+			slog.String("error", err.Error()),
+		)
+		respondJSON(w, http.StatusBadRequest, CodeBadRequest, err.Error(), nil)
+		return
+	}
 
-	// Note: EnvVars and WorkDir from the request are ignored in this minimal
-	// implementation to keep the first version focused; they can be extended later.
+	result := s.exec.ExecuteWithID(ctx, reqID, workDir, req.Command, timeout)
+
+	// Note: EnvVars from the request is ignored in this minimal
+	// implementation to keep the first version focused; it can be extended later.
 
 	if result.Stderr != "" && strings.Contains(result.Stderr, "[timeout]") {
 		respondJSON(w, http.StatusRequestTimeout, CodeRequestTimeout, "command execution timeout", result)
@@ -244,7 +254,17 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		timeout = 0
 	}
 
-	taskID, err := s.tm.Submit(req.Command, timeout)
+	workDir, err := s.exec.ResolveWorkDir(req.WorkDir)
+	if err != nil {
+		s.logger.Warn("invalid_work_dir",
+			slog.String("request_id", reqID),
+			slog.String("error", err.Error()),
+		)
+		respondJSON(w, http.StatusBadRequest, CodeBadRequest, err.Error(), nil)
+		return
+	}
+
+	taskID, err := s.tm.Submit(req.Command, workDir, timeout)
 	if err != nil {
 		if errors.Is(err, taskmanager.ErrMaxRunning) {
 			respondJSON(w, http.StatusTooManyRequests, CodeTooManyRequests, err.Error(), nil)

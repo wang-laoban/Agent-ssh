@@ -28,6 +28,7 @@ const (
 type Task struct {
 	ID         string               `json:"task_id"`
 	Command    string               `json:"command"`
+	WorkDir    string               `json:"work_dir,omitempty"`
 	Status     TaskStatus           `json:"status"`
 	Result     *executor.ExecResult `json:"result,omitempty"`
 	CreatedAt  time.Time            `json:"created_at"`
@@ -64,8 +65,9 @@ func New(cfg config.TaskManagerConfig, exec *executor.Executor, logger *slog.Log
 // ErrMaxRunning is returned when too many tasks are running.
 var ErrMaxRunning = errors.New("too many running tasks")
 
-// Submit creates and starts a new async task.
-func (tm *TaskManager) Submit(command string, timeout time.Duration) (string, error) {
+// Submit creates and starts a new async task. workDir must already be
+// validated by executor.ResolveWorkDir; empty means the executor default.
+func (tm *TaskManager) Submit(command, workDir string, timeout time.Duration) (string, error) {
 	tm.mu.Lock()
 	if tm.runningCount >= tm.maxRunning {
 		tm.mu.Unlock()
@@ -77,6 +79,7 @@ func (tm *TaskManager) Submit(command string, timeout time.Duration) (string, er
 	task := &Task{
 		ID:        taskID,
 		Command:   command,
+		WorkDir:   workDir,
 		Status:    TaskPending,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -89,6 +92,7 @@ func (tm *TaskManager) Submit(command string, timeout time.Duration) (string, er
 
 	tm.logger.Info("task_submitted",
 		slog.String("task_id", taskID),
+		slog.String("work_dir", workDir),
 		slog.String("command_preview", previewCommand(command)),
 	)
 
@@ -154,7 +158,7 @@ func (tm *TaskManager) runTask(task *Task, timeout time.Duration) {
 	task.UpdatedAt = now
 	tm.mu.Unlock()
 
-	result := tm.executor.ExecuteWithID(task.ctx, task.ID, task.Command, timeout)
+	result := tm.executor.ExecuteWithID(task.ctx, task.ID, task.WorkDir, task.Command, timeout)
 
 	finish := time.Now()
 	tm.mu.Lock()

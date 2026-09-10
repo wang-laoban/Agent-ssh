@@ -192,9 +192,13 @@ POST /api/v1/exec
 ```json
 {
   "command": "uname -a",
-  "timeout": 30
+  "timeout": 30,
+  "work_dir": "proj-a"
 }
 ```
+
+- `work_dir`（可选）：本次命令的工作目录。相对路径会挂在配置的 `executor.work_dir` 之下（如 `/tmp/agent_workspace/proj-a`），目录不存在时自动创建；任何逃逸出 `work_dir` 的路径（如 `../../etc`）会被拒绝（1001）。不传则使用默认 `work_dir`。**多个客户端/会话并发使用时，建议各自使用独立子目录，避免文件互相覆盖。**
+- `env_vars` 字段保留，当前版本忽略。
 
 响应：
 ```json
@@ -215,6 +219,8 @@ POST /api/v1/exec
 ```bash
 POST /api/v1/tasks
 ```
+
+请求体与 `/api/v1/exec` 相同（支持 `command` / `timeout` / `work_dir`）。
 
 响应：
 ```json
