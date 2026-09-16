@@ -100,6 +100,30 @@ This generates:
 - `agent-sign.key`: private key (permission 0600), used to sign logs.
 - `agent-sign.pub`: public key, used by consumers or operators to verify log integrity.
 
+### 2.5 (Optional) Register as a systemd Service
+
+On the target Linux machine, one command installs, registers and starts the agent:
+
+```bash
+sudo ./deploy/install-service.sh            # uses ./test-agent and ./config.yaml by default
+sudo ./deploy/install-service.sh install /path/to/test-agent /path/to/config.yaml
+```
+
+What the script does:
+
+- Installs the binary to `/usr/local/bin/test-agent` and the config to `/etc/agent/config.yaml` (an existing differing config is backed up as `.bak.<timestamp>`)
+- Writes `/etc/systemd/system/test-agent.service` (`Restart=always`, `WorkingDirectory=/etc/agent` — relative paths in the config such as `.api_token` and `agent-sign.key` therefore live under `/etc/agent` and survive reboots)
+- Runs `systemctl enable --now` and performs a health check
+- **Prints the API Token at the end**, ready to hand to the controller
+
+Re-run to upgrade (the service is stopped first so the running binary can be replaced). Uninstall:
+
+```bash
+sudo ./deploy/install-service.sh uninstall  # removes the service, keeps binary and config
+```
+
+Day-to-day: `journalctl -u test-agent -f` to follow logs, `systemctl restart test-agent` to restart.
+
 ### 3. Verify Logs
 
 ```bash

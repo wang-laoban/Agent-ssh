@@ -102,6 +102,30 @@ log:
 - `agent-sign.key`：私钥（权限 0600），用于对日志签名
 - `agent-sign.pub`：公钥，用于消费者或运维人员校验日志完整性
 
+### 2.5 （可选）注册为 systemd 服务
+
+在目标 Linux 机器上一条命令完成安装、注册、启动：
+
+```bash
+sudo ./deploy/install-service.sh            # 默认使用 ./test-agent 和 ./config.yaml
+sudo ./deploy/install-service.sh install /path/to/test-agent /path/to/config.yaml
+```
+
+脚本做的事：
+
+- 二进制装到 `/usr/local/bin/test-agent`，配置装到 `/etc/agent/config.yaml`（已有配置会备份为 `.bak.<时间戳>`）
+- 写入 `/etc/systemd/system/test-agent.service`（`Restart=always`，`WorkingDirectory=/etc/agent`——配置里的相对路径如 `.api_token`、`agent-sign.key` 因此都在 `/etc/agent` 下，重启不丢）
+- `systemctl enable --now` 启动并做健康检查
+- 结束时**直接打印 API Token**，可直接交给主控端
+
+升级时重复执行即可（会先停服再覆盖二进制，避免 text file busy）。卸载：
+
+```bash
+sudo ./deploy/install-service.sh uninstall  # 保留二进制与配置，只移除服务
+```
+
+日常运维：`journalctl -u test-agent -f` 跟踪日志，`systemctl restart test-agent` 重启。
+
 ### 3. 校验日志
 
 ```bash
