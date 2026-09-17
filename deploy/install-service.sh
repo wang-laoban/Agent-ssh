@@ -129,6 +129,9 @@ EOF
         log "token file ${token_file} not present yet; it will appear after first token init"
     fi
     log "follow logs with: journalctl -u ${SERVICE_NAME} -f"
+    log "the token rotates daily; retrieve the current one anytime with:"
+    log "  sudo journalctl -u ${SERVICE_NAME} --since today | grep -A3 'Token rotated' | tail -4"
+    log "  or: sudo cat ${token_file}"
 }
 
 do_uninstall() {

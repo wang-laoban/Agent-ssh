@@ -25,6 +25,11 @@ type TokenManager struct {
 	rotationHour int
 	logger       *slog.Logger
 
+	// OnRotate, when set, is called with the new token after every successful
+	// rotation. Use it for operational hints (e.g. printing the token to
+	// stdout/journald); it is never invoked from the logging path itself.
+	OnRotate func(token string)
+
 	manualRotate chan struct{}
 }
 
@@ -115,6 +120,9 @@ func (tm *TokenManager) RotateToken() (string, error) {
 	tm.logger.Info("token_rotated_successfully",
 		slog.String("token_hash_prefix", tm.hashPrefix(token)),
 	)
+	if tm.OnRotate != nil {
+		tm.OnRotate(token)
+	}
 	return token, nil
 }
 

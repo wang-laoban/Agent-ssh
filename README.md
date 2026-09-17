@@ -8,7 +8,7 @@
 
 - **远程命令执行**：同步执行（`POST /exec`）与异步任务（`POST /tasks`）两种模式
 - **文件上传**：通过 `POST /api/v1/upload` 直接下发测试程序或脚本
-- **动态 Token 鉴权**：Token 每日自动轮换，写入受权限保护的文件，启动时直接打印到终端，无需查文件
+- **动态 Token 鉴权**：Token 每日自动轮换，写入受权限保护的文件，启动时直接打印到终端，每次轮换后也会打印新 Token（服务模式下入 journald），无需查文件
 - **安全过滤**：命令黑名单/白名单、路径穿越防护、文件大小限制、扩展名白名单
 - **资源限制**：命令超时控制、输出截断（默认 10MB）、最大上传限制（默认 64MB）
 - **进程管理**：Unix 下使用进程组（PGID）清理，超时或取消时 kill 整个进程树；Windows 下直接结束主进程
@@ -137,10 +137,15 @@ sudo ./deploy/install-service.sh uninstall  # 保留二进制与配置，只移�
 ### 4. 把信息提供给 Claude Code
 
 先把当前 `README.md` 或 `README_EN.md` 提供给 Claude Code 读取。
-Agent 启动时会在终端打印当日 Token；如果终端输出已滚动，也可以直接读取 token 文件（如果 `auth.token_file` 在当前目录则为）：
+Agent 启动时会在终端打印当日 Token，每次轮换后也会再次打印。获取当前 Token 的途径：
 
 ```bash
+# 前台运行：终端输出里找；或读 token 文件（相对路径时位于工作目录）
 cat .api_token
+
+# systemd 服务模式（token_file 相对路径位于 /etc/agent）
+sudo journalctl -u test-agent --since today | grep -A3 "Token rotated" | tail -4
+sudo cat /etc/agent/.api_token
 ```
 
 拿到当日 Token 后，把 IP 地址、端口（默认 28080）以及 Token 提供给 Claude Code，这样你就有了一台远程测试机。

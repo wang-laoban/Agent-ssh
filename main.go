@@ -91,6 +91,19 @@ func main() {
 		logger.Error("failed_to_initialize_token", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+	// After a rotation, print the new token to stdout so it is retrievable
+	// via journald when running as a service (the startup banner below covers
+	// only the initial token). Set after InitToken to avoid double printing.
+	authMgr.OnRotate = func(token string) {
+		fmt.Printf(`
+============================================================
+  Token rotated at %s
+  New API Token : %s
+  (also written to %s)
+============================================================
+
+`, time.Now().Format("2006-01-02 15:04:05"), token, cfg.Auth.TokenFile)
+	}
 
 	// Executor: command filters and execution engine.
 	execEngine, err := executor.New(cfg.Executor, logger)
@@ -142,8 +155,9 @@ func main() {
   Token file  : %s
   Log file    : %s
 ------------------------------------------------------------
-  The token rotates daily at %02d:00 local time; after a
-  rotation, re-read it from the token file above.
+  The token rotates daily at %02d:00 local time; the new
+  token is printed here after each rotation. Running as a
+  service: sudo journalctl -u test-agent --since today
 ============================================================
 
 `, cfg.Server.ListenAddr(), authMgr.CurrentToken(), cfg.Auth.TokenFile, cfg.Log.File, cfg.Auth.RotationHour)

@@ -6,7 +6,7 @@ A lightweight remote command execution agent that runs on test machines. It prov
 
 - **Remote Command Execution**: synchronous (`POST /exec`) and asynchronous (`POST /tasks`) execution modes.
 - **File Upload**: distribute test programs or scripts via `POST /api/v1/upload`.
-- **Dynamic Token Authentication**: tokens are automatically rotated daily and written to a permission-protected file, avoiding hard-coded secrets. The current token is printed to the terminal on startup — no need to open the token file.
+- **Dynamic Token Authentication**: tokens are automatically rotated daily and written to a permission-protected file, avoiding hard-coded secrets. The current token is printed to the terminal on startup and re-printed after every rotation (into journald when running as a service) — no need to open the token file.
 - **Security Filtering**: command blacklist/whitelist, path traversal protection, file size limits, and extension whitelist.
 - **Resource Limits**: command timeout, output truncation (default 10MB), and maximum upload size (default 64MB).
 - **Process Management**: on Unix, process groups (PGID) are used so the entire process tree is killed on timeout/cancellation; on Windows the main process is terminated directly.
@@ -135,10 +135,15 @@ Day-to-day: `journalctl -u test-agent -f` to follow logs, `systemctl restart tes
 ### 4. Provide Token to Claude Code
 
 First share this README with Claude Code.
-The agent prints today's token to the terminal on startup; if the output has scrolled away, read the token file directly (if `auth.token_file` is in the current directory):
+The agent prints today's token on startup and re-prints it after every rotation. Ways to get the current token:
 
 ```bash
+# Foreground run: scroll the terminal output, or read the token file
 cat .api_token
+
+# systemd service (relative token_file lives under /etc/agent)
+sudo journalctl -u test-agent --since today | grep -A3 "Token rotated" | tail -4
+sudo cat /etc/agent/.api_token
 ```
 
 Copy today's token, along with the IP address and port (default 28080), to Claude Code. You now have a remote test machine.
